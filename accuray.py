@@ -17,14 +17,32 @@ def epe(input_flow, target_flow):
     return torch.norm(target_flow - input_flow, p=2, dim=1).mean()
 
 
-def calculate_pck(model, data_loader, device, thershold_range, alptha=1, img_size=240):
+def correct_correspondences(input_flow, target_flow, alpha, img_size):
+    '''
+    Computation PCK, i.e. number of pixels within a certain threshold
+    Args:
+        input_flow : estimated flow [BXHXW, 2]
+        target_flow : ground-truth flow [BXHXW, 2]
+        alpha : thresold
+        img_size : image size
+
+    Output:
+        PCK metric 
+    '''
+    # input flow is shape(BXH_gtXW_gt, 2)
+    dist = torch.norm(target_flow - input_flow, p=2, dim=1)
+    pck_threshold = alpha * img_size
+    mask = dist.le(pck_threshold) # 1 if dist <= pck_threshold, 0 else
+    return mask.sum().item()
+
+
+def calculate_pck(model, data_loader, device, alptha=1, img_size=240):
     '''
     Compute PCK for HPatches dataset follwed by DGC-Net and GLU-Net
     Args:
         model : trained model 
         data_loader : input dataloader 
         device : 'cpu' or 'gpu'
-        thershold_range : range of threshold 
         alpha : threshold to compute PCK
         img_size : size of input images
 
@@ -37,9 +55,8 @@ def calculate_pck(model, data_loader, device, thershold_range, alptha=1, img_siz
     pck_5_over_image = []
 
     n_registered_pxs = 0.0
-    array_n_correct_correspondences = np.zeros(thershold_range.shape, dtype=np.float32)
 
-    # What does that mean ? 
+
     pbar = tqdm(enumerate(data_loader), total = len(data_loader))
 
     for batch, mini_batch in pbar:
@@ -80,6 +97,76 @@ def calculate_pck(model, data_loader, device, thershold_range, alptha=1, img_siz
             torch.cat((flow_est_x[mask_gt].unsqueeze(1),
                        flow_est_y[mask_gt].unsqueeze(1)), dim=1)
 
-        img_size = max(mini_batch['source_image_size'][0])
+        img_size = max(mini_batch['source_image_size'][0], mini_batch['source_image_size'][1]).float().to(device)
+        px_1 = correct_correspondences(flow_est, flow_target, alpha=1.0/float(img_size),img_size=img_size)
+        px_5 = correct_correspondences(flow_est, flow_target, alpha=5.0/float(img_size), img_size = img_size)
+
+        pck_1_over_image.append(px_1/flow_target.shape[0])
+        pck_5_over_image.append(px_5/flow_target.shape[0])
         
+        output = {'pck_1_over_image' : np.mean(pck_1_over_image),
+                  'pck_5_over_image' : np.mean(pck_5_over_image)}
         
+        return output
+
+def calculate_epe_hpatches(model, data_loader, device, img_size=240):
+    '''
+    Compute EPE for HPatches dataset
+    Args:
+        model: trained model
+        data_loader: input dataloader
+        device: 'cpu' or 'gpu'
+        img_size: size of input images
+
+    Output:
+        aepe_array: averaged EPE for the whole sequence of HPatches
+    '''
+
+    aepe_array = []
+    n_registered_pxs = 0
+
+    pbar = tqdm(enumerate(data_loader), total = len(data_loader))
+    for _, mini_batch in pbar:
+
+        source_img = mini_batch['source_image'].to(device)
+        target_img = mini_batch['target_image'].to(device)
+        bs, _, _, _ = source_img.shape
+
+        # model prediction
+        estimated_grid, estimated_mask = model(source_img, target_img)
+
+        flow_est = estimated_grid[-1].permute(0, 2, 3, 1).to(device)
+        flow_target = mini_batch['correspondence_map'].to(device)
+
+        # applying mask 
+        mask_x_gt = \
+            flow_target[:,:,:,0].ge(-1) & flow_target[:,:,:,0].le(1)
+        mask_y_gt = \
+            flow_target[:,:,:,1].ge(-1) & flow_target[:,:,:,1].le(1)
+        mask_xx_gt = mask_x_gt & mask_y_gt
+        mask_gt = torch.cat((mask_xx_gt.unsqueeze(3),
+                             mask_xx_gt.unsqueeze(3)), dim=3)
+        
+        for i in range(bs):
+            # unnormalize the flow: [-1; 1] -> [0; im_size - 1]
+            flow_target[i] = (flow_target[i] + 1) * (img_size - 1)/2
+            flow_est[i] = (flow_est[i] + 1) * (img_size - 1)/2
+
+        flow_target_x = flow_target[:,:,:,0]
+        flow_target_y = flow_target[:,:,:,1]
+        flow_est_x = flow_est[:,:,:,0]
+        flow_est_y = flow_est[:,:,:,1]
+
+        flow_target = \
+            torch.cat((flow_target_x[mask_gt[:,:,:,0]].unsqueeze(1),
+                       flow_target_y[mask_gt[:,:,:,1]].unsqueeze(1)), dim=1)
+        
+        flow_est = \ 
+            torch.cat((flow_est_x[mask_gt[:,:,:,0]].unsqueeze(1),
+                       flow_est_y[mask_gt[:,:,:,1]].unsqueeze(1)), dim=1)
+        
+        aepe = epe(flow_est, flow_target)
+        aepe_array.append(aepe.item())
+        n_registered_pxs += flow_target.shape[0]
+    
+    return aepe_array 
