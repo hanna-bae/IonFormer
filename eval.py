@@ -14,7 +14,8 @@ import fnmatch
 
 from model.net import DGCNet
 from data.dataset import HPatchesDataset
-from utils.evaluate import calculate_epe_hpatches, calculate_pck_hpatches
+from utils.accuracy import calculate_pck, calculate_epe_hpatches
+# from utils.evaluate import calculate_epe_hpatches, calculate_pck_hpatches
 # add the dataset (~implement ing)
 # from data.dataset import kitti2012Stereo
 # from data.dataset import ETH3DStereo
@@ -74,8 +75,9 @@ with torch.no_grad():
         jac = []
     if (args.metric == 'pck'):
         # create a threshold range
-        threshold_range = np.linspace(0.005, 0.1, num=200)
-        res = np.zeros((number_of_scenes, len(threshold_range)))
+        res = []
+        # threshold_range = np.linspace(0.005, 0.1, num=200)
+        # res = np.zeros((number_of_scenes, len(threshold_range)))
 
     # loop over scenes (1-2, 1-3, 1-4, 1-5, 1-6)
     for id, k in enumerate(range(2, number_of_scenes + 2)):
@@ -97,10 +99,13 @@ with torch.no_grad():
             res.append(np.mean(epe_arr))
 
         if (args.metric == 'pck'):
-            for t_id, threshold in enumerate(threshold_range):
-                res[id, t_id] = calculate_pck_hpatches(net,
-                                                       test_dataloader,
-                                                       device,
-                                                       alpha=threshold)
+            pck = calculate_pck(net, test_dataloader, device, img_size=240)
+            # for t_id, threshold in enumerate(threshold_range):
+            #     res[id, t_id] = calculate_pck_hpatches(net,
+            #                                            test_dataloader,
+            #                                            device,
+            #                                            alpha=threshold)
+            res.append(pck['pck_1_over_image'])
+            res.append(pck['pck_5_over_image'])
 
     print(res)

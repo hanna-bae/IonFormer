@@ -36,14 +36,13 @@ def correct_correspondences(input_flow, target_flow, alpha, img_size):
     return mask.sum().item()
 
 
-def calculate_pck(model, data_loader, device, alptha=1, img_size=240):
+def calculate_pck(model, data_loader, device, img_size=240):
     '''
     Compute PCK for HPatches dataset follwed by DGC-Net and GLU-Net
     Args:
         model : trained model 
         data_loader : input dataloader 
         device : 'cpu' or 'gpu'
-        alpha : threshold to compute PCK
         img_size : size of input images
 
     Output: 
@@ -107,7 +106,7 @@ def calculate_pck(model, data_loader, device, alptha=1, img_size=240):
         output = {'pck_1_over_image' : np.mean(pck_1_over_image),
                   'pck_5_over_image' : np.mean(pck_5_over_image)}
         
-        return output
+    return output
 
 def calculate_epe_hpatches(model, data_loader, device, img_size=240):
     '''
@@ -161,8 +160,7 @@ def calculate_epe_hpatches(model, data_loader, device, img_size=240):
             torch.cat((flow_target_x[mask_gt[:,:,:,0]].unsqueeze(1),
                        flow_target_y[mask_gt[:,:,:,1]].unsqueeze(1)), dim=1)
         
-        flow_est = \ 
-            torch.cat((flow_est_x[mask_gt[:,:,:,0]].unsqueeze(1),
+        flow_est = torch.cat((flow_est_x[mask_gt[:,:,:,0]].unsqueeze(1),
                        flow_est_y[mask_gt[:,:,:,1]].unsqueeze(1)), dim=1)
         
         aepe = epe(flow_est, flow_target)
