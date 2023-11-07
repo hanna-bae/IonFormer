@@ -1,15 +1,15 @@
 import time
 import numpy as np
 import torch
-# find the meaninig of the import module 
+import psutil
 
 def cuda_time() -> float:
-    # waits for everything to finish running
+    '''Returns the current time after CUDA synchronization'''
     torch.cuda.synchronize() 
-    # time include waiting delay 
     return time.perf_counter() 
 
 def measure(model, img_size, num_repeates=500, num_warmup=500):
+    '''Measures the latency of a model given an input size.'''
     model.cuda()
     model.eval()
 
@@ -29,13 +29,29 @@ def measure(model, img_size, num_repeates=500, num_warmup=500):
     drop = int(len(latencies) * 0.25)
     return np.mean(latencies[drop:-drop])
 
-# GPU Memory consumption my code 
-def to_memory(model):
+
+def memory_consumption(model):
+    '''Returns the allocated and cached GPU memory in GB'''
     allocated = round(torch.cuda.memory_allocated(0)/1024**3, 1)
     cached = round(torch.cuda.memory_cached(0)/1024**3, 1)
+    return allocated, cached
 
 
-# Parameter count
 def model_parameter(model):
-    parameter = filter(lambda  p: p.requires_grad, model.parameters())
-    return sum([np.prod(p.size()) for p in parameter])
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+# need to modify
+def measure_power_usage():
+    for i in range(10):
+        cpu_percent = psutil.cpu_percent(interval=1)
+        mem = psutil.virtual_memory().percent
+        print(f"CPU: {cpu_percent}% | Memory: {mem}%")
+        time.sleep(1)
+
+'''
+Example Usage:
+    latency = measure_latency(model, img_size=240)
+    allocated_memory, cached_memory = memory_consumption(model)
+    num_params = model_parameter(model)
+    measure_power_usage()
+'''
