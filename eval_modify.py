@@ -15,6 +15,7 @@ import fnmatch
 from model.net import DGCNet
 from data.dataset import HPatchesDataset
 from utils.accuracy import calculate_pck, calculate_epe_hpatches
+from utils.measure_efficiency import measure_latency, to_memory, model_parameter
 # from utils.evaluate import calculate_epe_hpatches, calculate_pck_hpatches
 # add the dataset (~implement ing)
 # from data.dataset import kitti2012Stereo
@@ -67,6 +68,7 @@ net.load_state_dict(torch.load(checkpoint_fname, map_location=device)['state_dic
 net = nn.DataParallel(net)
 net.eval()
 net = net.to(device)
+# 여기서 바로 latency를 측정해야하는건가?
 
 with torch.no_grad():
     number_of_scenes = 5
@@ -108,4 +110,12 @@ with torch.no_grad():
             res.append(pck['pck_1_over_image'])
             res.append(pck['pck_5_over_image'])
 
-    print(res)
+    print('accuracy: ', res)
+    latency = measure_latency(net, 240, 500, 500)
+    print('latency: ', latency)
+    memory_allocate = to_memory(net)
+    print('memory: ', memory_allocate)
+    parameter = model_parameter(net)
+    print('parameter: ', parameter)
+
+
