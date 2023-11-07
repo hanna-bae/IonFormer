@@ -36,7 +36,9 @@ def memory_consumption(model):
     cached = round(torch.cuda.memory_cached(0)/1024**3, 1)
     return allocated, cached
 
-
+'''
+Modify using fvcore library
+'''
 def model_parameter(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
